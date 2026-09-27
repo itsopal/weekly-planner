@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weekly Planner — برنامه هفتگی</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📅</text></svg>">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header class="topbar">
+  <h1>📅 Weekly Planner <small>برنامه هفتگی</small></h1>
+  <button id="themeBtn" class="icon-btn" title="Dark / Light mode">🌙</button>
+</header>
+
+<nav class="weeknav">
+  <div class="weeknav-btns">
+    <button id="prevBtn">← Previous</button>
+    <button id="todayBtn" class="primary">Today</button>
+    <button id="nextBtn">Next →</button>
+  </div>
+  <div id="weekLabel" class="week-label">…</div>
+</nav>
+
+<div class="toolbar">
+  <button id="colsBtn">🧩 Columns</button>
+  <button id="copyBtn">📋 Copy Last Week</button>
+  <button id="statsBtn">📈 Stats</button>
+  <button id="exportBtn">📤 Export CSV</button>
+  <span id="saveStatus" class="save-status"></span>
+</div>
+
+<div class="grid-wrap">
+  <div id="grid" class="grid"></div>
+</div>
+
+<!-- Columns modal -->
+<div id="colsModal" class="modal hidden">
+  <div class="modal-card">
+    <h2>🧩 Manage Columns</h2>
+    <div class="add-row">
+      <input id="newColInput" type="text" placeholder="New category name…" maxlength="60">
+      <button id="addColBtn" class="primary">Add</button>
+    </div>
+    <ul id="colsList" class="cols-list"></ul>
+    <div class="modal-actions">
+      <button id="colsClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Stats modal -->
+<div id="statsModal" class="modal hidden">
+  <div class="modal-card">
+    <h2>📈 Planner Stats</h2>
+    <div id="statsBody" class="stats-body">Loading…</div>
+    <div class="modal-actions">
+      <button id="statsClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
