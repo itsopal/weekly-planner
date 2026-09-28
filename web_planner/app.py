@@ -8,6 +8,14 @@ Run:
     python app.py
 Then open: http://127.0.0.1:5000
 
+Password protection (single user):
+    Set the PLANNER_PASSWORD environment variable to require a login.
+    If it is NOT set, the site is open (handy for local use on your PC).
+    On PythonAnywhere, set it at the top of your WSGI file:
+        import os
+        os.environ['PLANNER_PASSWORD'] = 'your-secret-password'
+        os.environ['SECRET_KEY'] = 'long-random-string (see DEPLOY.md)'
+
 Data is stored in planner_data.json next to this file (same format as
 the desktop version, so you can copy that file here to migrate).
 """
@@ -19,10 +27,16 @@ import os
 import shutil
 from datetime import date, timedelta, datetime
 
-from flask import Flask, render_template, request, jsonify, Response
+from flask import Flask, render_template, request, jsonify, Response, \
+    session, redirect, url_for
+from werkzeug.security import generate_password_hash, check_password_hash
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_FILE = os.path.join(BASE_DIR, "planner_data.json")
+# DATA_DIR lets hosting platforms store data on a persistent disk.
+# Locally it just uses the project folder.
+DATA_DIR = os.environ.get("DATA_DIR", BASE_DIR)
+os.makedirs(DATA_DIR, exist_ok=True)
+DATA_FILE = os.path.join(DATA_DIR, "planner_data.json")
 BACKUP_FILE = DATA_FILE + ".bak"
 TEMP_FILE = DATA_FILE + ".tmp"
 
@@ -30,6 +44,44 @@ DEFAULT_COLUMNS = ["Work", "Study", "Health", "Personal"]
 MAX_NOTE_LENGTH = 2000
 
 app = Flask(__name__)
+
+# ------------------------------------------------------------------ #
+# Simple password protection (single user, session cookie)
+# ------------------------------------------------------------------ #
+app.secret_key = os.environ.get("SECRET_KEY", "dev-only-insecure-key")
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+
+_raw_password = os.environ.get("PLANNER_PASSWORD", "")
+PASSWORD_HASH = generate_password_hash(_raw_password) if _raw_password else None
+del _raw_password  # don't keep the plain password in memory
+if PASSWORD_HASH is None:
+    print("⚠️  WARNING: PLANNER_PASSWORD is not set — login is DISABLED (open site).")
+
+AUTH_ENABLED = PASSWORD_HASH is not None
+
+
+def safe_next(default="/"):
+    """Return the ?next= redirect target, but only if it's a local path
+    (prevents open-redirect attacks to external sites)."""
+    nxt = request.args.get("next") or default
+    if not nxt.startswith("/") or nxt.startswith("//"):
+        return default
+    return nxt
+
+
+@app.before_request
+def require_login():
+    """Protect every page/API except /login and static files."""
+    if not AUTH_ENABLED:
+        return None  # open mode: no password configured
+    if request.path == "/login" or request.path.startswith("/static/"):
+        return None
+    if not session.get("logged_in"):
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "error": "Login required"}), 401
+        return redirect(url_for("login", next=request.path))
+    return None
+
 
 # In-memory state, loaded once at startup, saved on every change.
 columns: list = []
@@ -101,15 +153,40 @@ load_data()
 
 
 # ------------------------------------------------------------------ #
+# Auth pages
+# ------------------------------------------------------------------ #
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if not AUTH_ENABLED:
+        return redirect(url_for("index"))  # no password configured
+    if session.get("logged_in"):
+        return redirect(safe_next())
+    error = None
+    if request.method == "POST":
+        if check_password_hash(PASSWORD_HASH, request.form.get("password", "")):
+            session["logged_in"] = True
+            session.permanent = True  # stay logged in for 30 days
+            return redirect(safe_next())
+        error = "Wrong password. Try again."
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
+# ------------------------------------------------------------------ #
 # Pages
 # ------------------------------------------------------------------ #
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", auth_enabled=AUTH_ENABLED)
 
 
 # ------------------------------------------------------------------ #
-# API
+# API (all protected by require_login when a password is set)
 # ------------------------------------------------------------------ #
 @app.route("/api/state")
 def api_state():
