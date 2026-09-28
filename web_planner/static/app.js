@@ -34,12 +34,17 @@ function setStatus(msg, cls) {
   el.textContent = msg;
   el.className = "save-status " + (cls || "");
 }
+function bounceToLogin() {
+  // Session expired (or logged out in another tab) -> go to login page.
+  window.location = "/login";
+}
 async function api(url, body) {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body || {}),
   });
+  if (res.status === 401) { bounceToLogin(); throw new Error("Session expired — please log in again."); }
   const data = await res.json();
   if (!res.ok || !data.ok) throw new Error(data.error || ("HTTP " + res.status));
   return data;
@@ -47,6 +52,7 @@ async function api(url, body) {
 
 async function fetchState() {
   const res = await fetch("/api/state");
+  if (res.status === 401) { bounceToLogin(); return; }
   const data = await res.json();
   columns = data.columns;
   entries = data.entries;
@@ -217,7 +223,9 @@ document.getElementById("statsBtn").onclick = async () => {
   const body = document.getElementById("statsBody");
   body.textContent = "Loading…";
   try {
-    const r = await (await fetch("/api/stats")).json();
+    const sres = await fetch("/api/stats");
+    if (sres.status === 401) { bounceToLogin(); return; }
+    const r = await sres.json();
     body.innerHTML =
       `Days tracked: <b>${r.days_tracked}</b><br>` +
       `Tasks done: <b>${r.tasks_done}</b> (${r.pct}%)<br>` +

@@ -218,3 +218,59 @@ button.small { font-size: 12px; padding: 4px 10px; }
   .week-label { font-size: 14px; }
   .topbar h1 { font-size: 17px; }
 }
+
+.top-actions { display: flex; align-items: center; gap: 10px; }
+.logout-link {
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.logout-link:hover { color: var(--danger); border-color: var(--danger); }
+
+/* ---------- login page ---------- */
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+.login-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 32px;
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+}
+.login-card h1 { margin: 0 0 6px; font-size: 22px; }
+.login-card .muted { color: var(--muted); font-size: 14px; margin: 0 0 18px; line-height: 1.6; }
+.login-card input[type="password"] {
+  width: 100%;
+  font-family: inherit;
+  font-size: 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  margin-bottom: 12px;
+}
+.login-card input[type="password"]:focus { border-color: var(--accent); }
+.login-card button { width: 100%; font-size: 16px; padding: 10px; }
+.login-error {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  padding: 8px;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
