@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login — Weekly Planner</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔒</text></svg>">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login-page">
+
+<div class="login-card">
+  <h1>📅 Weekly Planner</h1>
+  <p class="muted">This planner is private.<br>Enter your password to unlock.</p>
+  {% if error %}<div class="login-error">{{ error }}</div>{% endif %}
+  <form method="post" action="">
+    <input type="password" name="password" placeholder="Password" autofocus required>
+    <button class="primary" type="submit">Unlock 🔓</button>
+  </form>
+</div>
+
+<script>
+// Match the dark/light theme chosen on the main page.
+try { document.documentElement.dataset.theme = localStorage.getItem("planner-theme") || "light"; } catch (e) {}
+</script>
+</body>
+</html>

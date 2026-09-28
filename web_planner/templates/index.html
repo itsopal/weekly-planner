@@ -11,7 +11,10 @@
 
 <header class="topbar">
   <h1>📅 Weekly Planner <small>برنامه هفتگی</small></h1>
-  <button id="themeBtn" class="icon-btn" title="Dark / Light mode">🌙</button>
+  <div class="top-actions">
+    {% if auth_enabled %}<a href="/logout" class="logout-link" title="Log out">🔒 Logout</a>{% endif %}
+    <button id="themeBtn" class="icon-btn" title="Dark / Light mode">🌙</button>
+  </div>
 </header>
 
 <nav class="weeknav">
