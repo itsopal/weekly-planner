@@ -1,0 +1,36 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Virtual environments and packaging artifacts
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Local settings and secrets
+.env
+.env.*
+!.env.example
+
+# Personal planner data (including atomic-save files and backups)
+planner_data.json
+planner_data.json.bak*
+planner_data.json.tmp*
+planner_backups/
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

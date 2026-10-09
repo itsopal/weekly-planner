@@ -31,7 +31,9 @@
   <button id="copyBtn">📋 Copy Last Week</button>
   <button id="statsBtn">📈 Stats</button>
   <button id="exportBtn">📤 Export CSV</button>
-  <span id="saveStatus" class="save-status"></span>
+  <button id="backupsBtn">🕘 Backup History</button>
+  <span id="saveStatus" class="save-status" aria-live="polite"></span>
+  <button id="retryBtn" class="small" type="button" hidden>Retry saves</button>
 </div>
 
 <div class="grid-wrap">
@@ -60,6 +62,18 @@
     <div id="statsBody" class="stats-body">Loading…</div>
     <div class="modal-actions">
       <button id="statsClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Backup history modal -->
+<div id="backupsModal" class="modal hidden">
+  <div class="modal-card">
+    <h2>🕘 Backup History</h2>
+    <p class="backup-help">The latest 10 saved versions are kept. Restoring creates a backup of the current planner first.</p>
+    <div id="backupsBody" class="backup-list">Loading backups…</div>
+    <div class="modal-actions">
+      <button id="backupsClose">Close</button>
     </div>
   </div>
 </div>
