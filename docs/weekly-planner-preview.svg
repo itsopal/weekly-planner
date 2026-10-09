@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1050" viewBox="0 0 1440 1050" role="img" aria-labelledby="title description">
+  <title id="title">Weekly Planner interface preview</title>
+  <desc id="description">Illustrative light-theme preview of the weekly planner with sample categories, dates, checkboxes, and notes. The content is synthetic; this is not a capture of anyone's planner data.</desc>
+  <defs>
+    <style>
+      text { font-family: "Segoe UI", Tahoma, Arial, sans-serif; fill: #1c2333; }
+      .muted { fill: #6b768c; }
+      .small { font-size: 13px; }
+      .tiny { font-size: 11px; }
+      .card { fill: #fff; stroke: #dde3ee; stroke-width: 1.4; }
+      .button { fill: #fff; stroke: #dde3ee; stroke-width: 1.4; }
+      .blue { fill: #3b82f6; stroke: #3b82f6; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="1050" fill="#f4f6fb"/>
+  <rect width="1440" height="60" fill="#fff"/>
+  <line x1="0" y1="59.5" x2="1440" y2="59.5" stroke="#dde3ee"/>
+  <text x="22" y="38" font-size="21" font-weight="700">📅 Weekly Planner</text>
+  <text x="228" y="37" font-size="13" class="muted">برنامه هفتگی</text>
+  <rect x="1376" y="12" width="42" height="36" rx="8" class="button"/>
+  <text x="1388" y="37" font-size="19">🌙</text>
+
+  <rect x="20" y="73" width="116" height="38" rx="8" class="button"/>
+  <text x="38" y="98" font-size="14">← Previous</text>
+  <rect x="145" y="73" width="78" height="38" rx="8" class="blue"/>
+  <text x="163" y="98" font-size="14" fill="#fff" style="fill:#fff" font-weight="600">Today</text>
+  <rect x="232" y="73" width="108" height="38" rx="8" class="button"/>
+  <text x="251" y="98" font-size="14">Next →</text>
+  <text x="1388" y="98" font-size="15" text-anchor="end" font-weight="700">Week of Oct 5, 2026 — Oct 11, 2026   [4/28 done (14%)]</text>
+
+  <rect x="20" y="127" width="135" height="38" rx="8" class="button"/>
+  <text x="34" y="151" font-size="14">🧩 Columns</text>
+  <rect x="163" y="127" width="188" height="38" rx="8" class="button"/>
+  <text x="176" y="151" font-size="14">📋 Copy Last Week</text>
+  <rect x="359" y="127" width="112" height="38" rx="8" class="button"/>
+  <text x="374" y="151" font-size="14">📈 Stats</text>
+  <rect x="479" y="127" width="146" height="38" rx="8" class="button"/>
+  <text x="493" y="151" font-size="14">📤 Export CSV</text>
+  <rect x="633" y="127" width="178" height="38" rx="8" class="button"/>
+  <text x="646" y="151" font-size="14">🕘 Backup History</text>
+  <text x="1417" y="151" font-size="13" text-anchor="end" fill="#22a355">Saved ✓</text>
+
+  <!-- Table headings -->
+  <rect x="20" y="181" width="150" height="50" rx="10" class="card"/>
+  <text x="95" y="212" font-size="14" font-weight="700" text-anchor="middle">Day</text>
+
+  <rect x="178" y="181" width="297" height="50" rx="10" class="card"/>
+  <text x="326.5" y="202" font-size="15" font-weight="700" text-anchor="middle">Work</text>
+  <text x="326.5" y="220" font-size="11" text-anchor="middle" class="muted">🔥 1-day streak</text>
+  <rect x="483" y="181" width="297" height="50" rx="10" class="card"/>
+  <text x="631.5" y="211" font-size="15" font-weight="700" text-anchor="middle">Study</text>
+  <rect x="788" y="181" width="297" height="50" rx="10" class="card"/>
+  <text x="936.5" y="211" font-size="15" font-weight="700" text-anchor="middle">Health</text>
+  <rect x="1093" y="181" width="297" height="50" rx="10" class="card"/>
+  <text x="1241.5" y="211" font-size="15" font-weight="700" text-anchor="middle">Personal</text>
+
+  <!-- Monday -->
+  <rect x="20" y="239" width="150" height="104" rx="10" class="card"/>
+  <text x="31" y="260" font-size="14" font-weight="700">Mon</text>
+  <text x="31" y="278" font-size="12" class="muted">Oct 5, 2026</text>
+  <text x="31" y="297" font-size="12" font-weight="700">(1/4 done)</text>
+  <rect x="31" y="309" width="77" height="25" rx="6" class="button"/><text x="43" y="326" font-size="11">Clear day</text>
+  <rect x="178" y="239" width="297" height="104" rx="10" fill="#c9f0b4" stroke="#7cc576" stroke-width="1.4"/>
+  <rect x="193" y="253" width="15" height="15" rx="3" fill="#22a355" stroke="#22a355"/><path d="M196 260l4 4 7-8" fill="none" stroke="#fff" stroke-width="2"/>
+  <text x="216" y="265" font-size="13" class="muted">done</text>
+  <text x="193" y="292" font-size="13">Weekly planning</text>
+  <text x="193" y="312" font-size="13" class="muted">Set priorities for the week</text>
+  <rect x="483" y="239" width="297" height="104" rx="10" class="card"/>
+  <rect x="498" y="253" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="521" y="265" font-size="13" class="muted">done</text>
+  <text x="498" y="293" font-size="13" class="muted">Write a note…</text>
+  <rect x="788" y="239" width="297" height="104" rx="10" class="card"/>
+  <rect x="803" y="253" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="826" y="265" font-size="13" class="muted">done</text>
+  <text x="803" y="293" font-size="13" class="muted">Write a note…</text>
+  <rect x="1093" y="239" width="297" height="104" rx="10" class="card"/>
+  <rect x="1108" y="253" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="1131" y="265" font-size="13" class="muted">done</text>
+  <text x="1108" y="293" font-size="13" class="muted">Write a note…</text>
+
+  <!-- Tuesday -->
+  <rect x="20" y="351" width="150" height="104" rx="10" class="card"/>
+  <text x="31" y="372" font-size="14" font-weight="700">Tue</text><text x="31" y="390" font-size="12" class="muted">Oct 6, 2026</text><text x="31" y="409" font-size="12" font-weight="700">(1/4 done)</text>
+  <rect x="31" y="421" width="77" height="25" rx="6" class="button"/><text x="43" y="438" font-size="11">Clear day</text>
+  <rect x="178" y="351" width="297" height="104" rx="10" class="card"/><rect x="193" y="365" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="216" y="377" font-size="13" class="muted">done</text><text x="193" y="405" font-size="13" class="muted">Write a note…</text>
+  <rect x="483" y="351" width="297" height="104" rx="10" fill="#c9f0b4" stroke="#7cc576" stroke-width="1.4"/><rect x="498" y="365" width="15" height="15" rx="3" fill="#22a355" stroke="#22a355"/><path d="M501 372l4 4 7-8" fill="none" stroke="#fff" stroke-width="2"/><text x="521" y="377" font-size="13" class="muted">done</text><text x="498" y="405" font-size="13">Read chapter 4</text><text x="498" y="425" font-size="13" class="muted">Take notes as you go</text>
+  <rect x="788" y="351" width="297" height="104" rx="10" class="card"/><rect x="803" y="365" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="826" y="377" font-size="13" class="muted">done</text><text x="803" y="405" font-size="13" class="muted">Write a note…</text>
+  <rect x="1093" y="351" width="297" height="104" rx="10" class="card"/><rect x="1108" y="365" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="1131" y="377" font-size="13" class="muted">done</text><text x="1108" y="405" font-size="13" class="muted">Write a note…</text>
+
+  <!-- Wednesday -->
+  <rect x="20" y="463" width="150" height="104" rx="10" class="card"/>
+  <text x="31" y="484" font-size="14" font-weight="700">Wed</text><text x="31" y="502" font-size="12" class="muted">Oct 7, 2026</text><text x="31" y="521" font-size="12" font-weight="700">(1/4 done)</text>
+  <rect x="31" y="533" width="77" height="25" rx="6" class="button"/><text x="43" y="550" font-size="11">Clear day</text>
+  <rect x="178" y="463" width="297" height="104" rx="10" class="card"/><rect x="193" y="477" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="216" y="489" font-size="13" class="muted">done</text><text x="193" y="517" font-size="13" class="muted">Write a note…</text>
+  <rect x="483" y="463" width="297" height="104" rx="10" class="card"/><rect x="498" y="477" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="521" y="489" font-size="13" class="muted">done</text><text x="498" y="517" font-size="13" class="muted">Write a note…</text>
+  <rect x="788" y="463" width="297" height="104" rx="10" fill="#c9f0b4" stroke="#7cc576" stroke-width="1.4"/><rect x="803" y="477" width="15" height="15" rx="3" fill="#22a355" stroke="#22a355"/><path d="M806 484l4 4 7-8" fill="none" stroke="#fff" stroke-width="2"/><text x="826" y="489" font-size="13" class="muted">done</text><text x="803" y="517" font-size="13">Evening walk</text><text x="803" y="537" font-size="13" class="muted">30 minutes outside</text>
+  <rect x="1093" y="463" width="297" height="104" rx="10" class="card"/><rect x="1108" y="477" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="1131" y="489" font-size="13" class="muted">done</text><text x="1108" y="517" font-size="13" class="muted">Write a note…</text>
+
+  <!-- Thursday -->
+  <rect x="20" y="575" width="150" height="104" rx="10" class="card"/>
+  <text x="31" y="596" font-size="14" font-weight="700">Thu</text><text x="31" y="614" font-size="12" class="muted">Oct 8, 2026</text><text x="31" y="633" font-size="12" font-weight="700">(0/4 done)</text>
+  <rect x="31" y="645" width="77" height="25" rx="6" class="button"/><text x="43" y="662" font-size="11">Clear day</text>
+  <rect x="178" y="575" width="297" height="104" rx="10" class="card"/><rect x="193" y="589" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="216" y="601" font-size="13" class="muted">done</text><text x="193" y="629" font-size="13" class="muted">Write a note…</text>
+  <rect x="483" y="575" width="297" height="104" rx="10" class="card"/><rect x="498" y="589" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="521" y="601" font-size="13" class="muted">done</text><text x="498" y="629" font-size="13" class="muted">Write a note…</text>
+  <rect x="788" y="575" width="297" height="104" rx="10" class="card"/><rect x="803" y="589" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="826" y="601" font-size="13" class="muted">done</text><text x="803" y="629" font-size="13" class="muted">Write a note…</text>
+  <rect x="1093" y="575" width="297" height="104" rx="10" class="card"/><rect x="1108" y="589" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="1131" y="601" font-size="13" class="muted">done</text><text x="1108" y="629" font-size="13">Call family</text>
+
+  <!-- Friday, highlighted as today -->
+  <rect x="20" y="687" width="150" height="104" rx="10" fill="#fff3cd" stroke="#e0a800" stroke-width="1.6"/>
+  <text x="31" y="708" font-size="14" font-weight="700">Fri</text><rect x="60" y="694" width="43" height="18" rx="6" fill="#e0a800"/><text x="81.5" y="707" font-size="9" text-anchor="middle" fill="#fff" style="fill:#fff" font-weight="700">TODAY</text>
+  <text x="31" y="726" font-size="12" class="muted">Oct 9, 2026</text><text x="31" y="745" font-size="12" font-weight="700">(1/4 done)</text><rect x="31" y="757" width="77" height="25" rx="6" class="button"/><text x="43" y="774" font-size="11">Clear day</text>
+  <rect x="178" y="687" width="297" height="104" rx="10" fill="#c9f0b4" stroke="#7cc576" stroke-width="1.4"/><rect x="193" y="701" width="15" height="15" rx="3" fill="#22a355" stroke="#22a355"/><path d="M196 708l4 4 7-8" fill="none" stroke="#fff" stroke-width="2"/><text x="216" y="713" font-size="13" class="muted">done</text><text x="193" y="741" font-size="13">Review priorities</text><text x="193" y="761" font-size="13" class="muted">Choose three next actions</text>
+  <rect x="483" y="687" width="297" height="104" rx="10" class="card"/><rect x="498" y="701" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="521" y="713" font-size="13" class="muted">done</text><text x="498" y="741" font-size="13" class="muted">Write a note…</text>
+  <rect x="788" y="687" width="297" height="104" rx="10" class="card"/><rect x="803" y="701" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="826" y="713" font-size="13" class="muted">done</text><text x="803" y="741" font-size="13" class="muted">Write a note…</text>
+  <rect x="1093" y="687" width="297" height="104" rx="10" class="card"/><rect x="1108" y="701" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="1131" y="713" font-size="13" class="muted">done</text><text x="1108" y="741" font-size="13" class="muted">Write a note…</text>
+
+  <!-- Saturday -->
+  <rect x="20" y="799" width="150" height="104" rx="10" class="card"/>
+  <text x="31" y="820" font-size="14" font-weight="700">Sat</text><text x="31" y="838" font-size="12" class="muted">Oct 10, 2026</text><text x="31" y="857" font-size="12" font-weight="700">(0/4 done)</text><rect x="31" y="869" width="77" height="25" rx="6" class="button"/><text x="43" y="886" font-size="11">Clear day</text>
+  <rect x="178" y="799" width="297" height="104" rx="10" class="card"/><rect x="193" y="813" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="216" y="825" font-size="13" class="muted">done</text><text x="193" y="853" font-size="13" class="muted">Write a note…</text>
+  <rect x="483" y="799" width="297" height="104" rx="10" class="card"/><rect x="498" y="813" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="521" y="825" font-size="13" class="muted">done</text><text x="498" y="853" font-size="13" class="muted">Write a note…</text>
+  <rect x="788" y="799" width="297" height="104" rx="10" class="card"/><rect x="803" y="813" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="826" y="825" font-size="13" class="muted">done</text><text x="803" y="853" font-size="13" class="muted">Write a note…</text>
+  <rect x="1093" y="799" width="297" height="104" rx="10" class="card"/><rect x="1108" y="813" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="1131" y="825" font-size="13" class="muted">done</text><text x="1108" y="853" font-size="13" class="muted">Write a note…</text>
+
+  <!-- Sunday -->
+  <rect x="20" y="911" width="150" height="104" rx="10" class="card"/>
+  <text x="31" y="932" font-size="14" font-weight="700">Sun</text><text x="31" y="950" font-size="12" class="muted">Oct 11, 2026</text><text x="31" y="969" font-size="12" font-weight="700">(0/4 done)</text><rect x="31" y="981" width="77" height="25" rx="6" class="button"/><text x="43" y="998" font-size="11">Clear day</text>
+  <rect x="178" y="911" width="297" height="104" rx="10" class="card"/><rect x="193" y="925" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="216" y="937" font-size="13" class="muted">done</text><text x="193" y="965" font-size="13" class="muted">Write a note…</text>
+  <rect x="483" y="911" width="297" height="104" rx="10" class="card"/><rect x="498" y="925" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="521" y="937" font-size="13" class="muted">done</text><text x="498" y="965" font-size="13" class="muted">Write a note…</text>
+  <rect x="788" y="911" width="297" height="104" rx="10" class="card"/><rect x="803" y="925" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="826" y="937" font-size="13" class="muted">done</text><text x="803" y="965" font-size="13" class="muted">Write a note…</text>
+  <rect x="1093" y="911" width="297" height="104" rx="10" class="card"/><rect x="1108" y="925" width="15" height="15" rx="3" fill="#fff" stroke="#9aa4bb"/><text x="1131" y="937" font-size="13" class="muted">done</text><text x="1108" y="965" font-size="13" class="muted">Write a note…</text>
+</svg>
