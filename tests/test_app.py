@@ -2,7 +2,7 @@ import csv
 import io
 import json
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from threading import Barrier
 
@@ -26,6 +26,8 @@ def planner(tmp_path, monkeypatch):
     monkeypatch.setattr(planner_module, "entries", {})
     monkeypatch.setattr(planner_module, "AUTH_ENABLED", False)
     monkeypatch.setattr(planner_module, "PASSWORD_HASH", None)
+    with planner_module._LOGIN_ATTEMPTS_LOCK:
+        planner_module._LOGIN_ATTEMPTS.clear()
     planner_module.app.config.update(TESTING=True, SECRET_KEY="test-only-secret")
     return planner_module
 
@@ -42,6 +44,25 @@ def protected_client(client, planner):
     return client
 
 
+def test_missing_secret_key_warns_when_authentication_is_disabled(planner, capsys):
+    secret_key = planner._resolve_secret_key(None, password_configured=False)
+
+    assert secret_key == planner.DEVELOPMENT_SECRET_KEY
+    assert "SECRET_KEY is not set" in capsys.readouterr().out
+
+
+def test_missing_secret_key_refuses_password_protected_startup(planner):
+    with pytest.raises(RuntimeError, match="SECRET_KEY must be set"):
+        planner._resolve_secret_key(None, password_configured=True)
+
+
+def test_development_secret_key_is_rejected_with_password_protection(planner):
+    with pytest.raises(RuntimeError, match="unique random value"):
+        planner._resolve_secret_key(
+            planner.DEVELOPMENT_SECRET_KEY, password_configured=True
+        )
+
+
 def test_index_renders_the_planner_in_open_mode(client):
     response = client.get("/")
 
@@ -49,6 +70,7 @@ def test_index_renders_the_planner_in_open_mode(client):
     assert b"Weekly Planner" in response.data
     assert b'id="grid"' in response.data
     assert b'id="backupsBtn"' in response.data
+    assert b'id="discardRejectedBtn"' in response.data
     assert b'id="backupsModal"' in response.data
     assert b"Logout" not in response.data
 
@@ -65,6 +87,18 @@ def test_state_returns_default_columns_and_empty_entries(client, planner):
 
     assert response.status_code == 200
     assert response.json == {"columns": planner.DEFAULT_COLUMNS, "entries": {}}
+
+
+def test_security_and_cache_headers_are_set(client):
+    response = client.get("/api/state")
+
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    assert response.headers["Permissions-Policy"] == (
+        "camera=(), microphone=(), geolocation=()"
+    )
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 def test_auth_protects_pages_and_api_but_allows_static_assets(protected_client):
@@ -107,7 +141,20 @@ def test_login_rejects_bad_password_then_accepts_a_local_next(protected_client):
     assert b"Wrong password" in wrong_password.data
     assert valid_password.status_code == 302
     assert valid_password.headers["Location"] == "/api/state"
+    assert "SameSite=Lax" in valid_password.headers["Set-Cookie"]
     assert protected_client.get("/api/state").status_code == 200
+
+
+def test_login_rate_limits_repeated_failures(protected_client, planner):
+    for _ in range(planner.LOGIN_MAX_ATTEMPTS):
+        response = protected_client.post("/login", data={"password": "wrong"})
+        assert response.status_code == 200
+
+    limited = protected_client.post("/login", data={"password": TEST_PASSWORD})
+
+    assert limited.status_code == 429
+    assert int(limited.headers["Retry-After"]) > 0
+    assert b"Too many login attempts" in limited.data
 
 
 def test_login_rejects_external_redirect_target(protected_client):
@@ -178,6 +225,22 @@ def test_cell_rejects_invalid_date_or_column(client, payload, expected_error):
 
     assert response.status_code == 400
     assert response.json == {"ok": False, "error": expected_error}
+
+
+def test_api_rejects_plain_text_mutation_requests(client, planner):
+    payload = json.dumps(
+        {"date": "2026-10-12", "column": "Work", "done": True, "note": "x"}
+    )
+
+    response = client.post("/api/cell", data=payload, content_type="text/plain")
+
+    assert response.status_code == 415
+    assert response.json == {
+        "ok": False,
+        "error": "Content-Type must be application/json",
+    }
+    assert planner.entries == {}
+    assert not Path(planner.DATA_FILE).exists()
 
 
 def test_cell_truncates_notes_at_the_documented_limit(client, planner):
@@ -397,6 +460,34 @@ def test_stats_returns_empty_summary_for_new_planner(client):
     }
 
 
+def test_stats_streak_uses_browser_local_today(client, planner, monkeypatch):
+    class ServerDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 10, 23)
+
+    monkeypatch.setattr(planner, "date", ServerDate)
+    planner.entries.update(
+        {
+            "2026-10-12": {"Work": {"done": True, "note": ""}},
+            "2026-10-13": {"Work": {"done": True, "note": ""}},
+        }
+    )
+
+    response = client.get("/api/stats?today=2026-10-13")
+
+    assert response.status_code == 200
+    assert response.json["best_streak"] == 2
+    assert response.json["best_streak_col"] == "Work"
+
+
+def test_stats_rejects_an_invalid_browser_today(client):
+    response = client.get("/api/stats?today=not-a-date")
+
+    assert response.status_code == 400
+    assert response.json == {"ok": False, "error": "Bad today date"}
+
+
 def test_stats_calculates_completion_and_streak(client, planner, monkeypatch):
     class FrozenDate(date):
         @classmethod
@@ -429,6 +520,30 @@ def test_stats_calculates_completion_and_streak(client, planner, monkeypatch):
         "best_streak_col": "Work",
         "best_streak": 2,
     }
+
+
+@pytest.mark.parametrize(
+    ("formula", "safe_formula"),
+    [
+        ("=1+1", "'=1+1"),
+        ("+SUM(A1:A2)", "'+SUM(A1:A2)"),
+        ("-1+2", "'-1+2"),
+        ("@SUM(A1:A2)", "'@SUM(A1:A2)"),
+        ("\t=1+1", "'\t=1+1"),
+    ],
+)
+def test_csv_export_neutralizes_spreadsheet_formulas(
+    client, planner, formula, safe_formula
+):
+    planner.columns[0] = "=Category"
+    planner.entries["2026-10-12"] = {"=Category": {"done": False, "note": formula}}
+
+    response = client.get("/api/export")
+    content = response.get_data(as_text=True).removeprefix("\ufeff")
+    rows = list(csv.reader(io.StringIO(content)))
+
+    assert rows[0][1] == "'=Category Done"
+    assert rows[1][2] == safe_formula
 
 
 def test_export_returns_bom_sorted_csv_with_quoted_notes(client, planner):
@@ -493,7 +608,7 @@ def test_mutation_endpoints_report_storage_errors(
     assert response.json == {"ok": False, "error": "disk full"}
 
 
-def test_load_data_falls_back_to_backup_when_primary_file_is_corrupt(planner):
+def test_load_data_falls_back_to_backup_when_primary_file_is_corrupt(planner, caplog):
     Path(planner.DATA_FILE).write_text("not json", encoding="utf-8")
     Path(planner.BACKUP_FILE).write_text(
         json.dumps({"columns": ["Custom"], "entries": {"2026-10-12": {}}}),
@@ -504,6 +619,59 @@ def test_load_data_falls_back_to_backup_when_primary_file_is_corrupt(planner):
 
     assert planner.columns == ["Custom"]
     assert planner.entries == {"2026-10-12": {}}
+    assert "invalid or unreadable" in caplog.text
+    assert "Recovered planner data from fallback" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "corrupt_entries",
+    [
+        {"2026-10-12": "not a day object"},
+        {"2026-10-12": {"Work": "yes"}},
+        {"2026-10-12": {"Work": {"done": "yes"}}},
+        {"2026-10-12": {"Work": {"note": 42}}},
+    ],
+)
+def test_load_data_falls_back_when_nested_entry_data_is_corrupt(
+    client, planner, corrupt_entries
+):
+    Path(planner.DATA_FILE).write_text(
+        json.dumps({"columns": ["Work"], "entries": corrupt_entries}),
+        encoding="utf-8",
+    )
+    valid_entries = {"2026-10-12": {"Work": {"done": True, "note": "Recovered"}}}
+    Path(planner.BACKUP_FILE).write_text(
+        json.dumps({"columns": ["Work"], "entries": valid_entries}),
+        encoding="utf-8",
+    )
+
+    planner.load_data()
+
+    assert planner.entries == valid_entries
+    assert client.get("/api/stats").status_code == 200
+    assert client.get("/api/export").status_code == 200
+    response = client.post(
+        "/api/cell",
+        json={"date": "2026-10-13", "column": "Work", "done": True},
+    )
+    assert response.status_code == 200
+
+
+def test_backup_history_coalesces_saves_within_the_daily_interval(client, planner):
+    for version in range(6):
+        planner.entries = {
+            "2026-10-12": {"Work": {"done": True, "note": f"version-{version}"}}
+        }
+        planner.save_data()
+
+    backups = client.get("/api/backups").json["backups"]
+
+    assert len(backups) == 1
+    snapshot_path = Path(planner.BACKUP_DIR, backups[0]["id"])
+    _, snapshot_entries = planner._read_data_file(str(snapshot_path))
+    assert backups[0]["id"].endswith(".json.gz")
+    assert snapshot_path.read_bytes().startswith(b"\x1f\x8b")
+    assert snapshot_entries["2026-10-12"]["Work"]["note"] == "version-0"
 
 
 def test_backup_history_rotates_and_keeps_the_legacy_backup(
@@ -511,7 +679,20 @@ def test_backup_history_rotates_and_keeps_the_legacy_backup(
 ):
     monkeypatch.setattr(planner, "MAX_BACKUPS", 3)
 
+    class Clock(datetime):
+        current = datetime(2026, 10, 1, tzinfo=timezone.utc)
+
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                return cls.current.replace(tzinfo=None)
+            return cls.current.astimezone(tz)
+
+    monkeypatch.setattr(planner, "datetime", Clock)
+
     for version in range(6):
+        if version:
+            Clock.current += timedelta(days=1)
         planner.entries = {
             "2026-10-12": {"Work": {"done": True, "note": f"version-{version}"}}
         }
@@ -570,10 +751,10 @@ def test_restore_endpoint_restores_a_snapshot_and_backs_up_current_data(
     assert planner.entries["2026-10-12"]["Focus"]["note"] == "Original"
     history = client.get("/api/backups").json["backups"]
     assert len(history) == 2
-    current_snapshot = json.loads(
-        Path(planner.BACKUP_DIR, history[0]["id"]).read_text(encoding="utf-8")
+    _, current_snapshot = planner._read_data_file(
+        str(Path(planner.BACKUP_DIR, history[0]["id"]))
     )
-    assert current_snapshot["entries"]["2026-10-12"]["Focus"]["note"] == "Current"
+    assert current_snapshot["2026-10-12"]["Focus"]["note"] == "Current"
 
 
 @pytest.mark.parametrize(

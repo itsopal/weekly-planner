@@ -96,11 +96,44 @@ function overlayPendingCells() {
   }
 }
 
+function hasSyncablePendingCells() {
+  return [...pendingCells.values()].some(item => !item.rejected);
+}
+
+function rejectedPendingCells() {
+  return [...pendingCells.entries()].filter(([, item]) => item.rejected);
+}
+
+function showRejectedStatus(rejected) {
+  if (!rejected.length) return;
+  if (rejected.length === 1) {
+    setStatus(
+      `Edit rejected by server (${rejected[0][1].rejected}). Edit or discard it to clear the queue.`,
+      "err"
+    );
+  } else {
+    setStatus(
+      `${rejected.length} edits were rejected. Edit or discard them to clear the queue.`,
+      "err"
+    );
+  }
+}
+
 function updateRetryButton() {
   const button = document.getElementById("retryBtn");
-  if (!button) return;
-  button.hidden = pendingCells.size === 0;
-  button.textContent = navigator.onLine ? "Retry saves" : "Waiting for connection";
+  if (button) {
+    button.hidden = !hasSyncablePendingCells();
+    button.textContent = navigator.onLine ? "Retry saves" : "Waiting for connection";
+  }
+
+  const discardButton = document.getElementById("discardRejectedBtn");
+  if (discardButton) {
+    const rejectedCount = rejectedPendingCells().length;
+    discardButton.hidden = rejectedCount === 0;
+    discardButton.textContent = rejectedCount > 1
+      ? `Discard ${rejectedCount} rejected edits`
+      : "Discard rejected edit";
+  }
 }
 
 /* ---------------- API helpers ---------------- */
@@ -194,7 +227,7 @@ function cancelRetryTimer() {
 }
 
 function scheduleRetry() {
-  if (retryTimer || !pendingCells.size) return;
+  if (retryTimer || !hasSyncablePendingCells()) return;
   const delay = retryDelayMs;
   retryDelayMs = Math.min(retryDelayMs * 2, 60000);
   retryTimer = setTimeout(() => {
@@ -244,6 +277,10 @@ function commitCellLocally(item) {
 
 async function syncPendingCells() {
   if (syncInProgress || !pendingCells.size || !navigator.onLine) return;
+  if (!hasSyncablePendingCells()) {
+    showRejectedStatus(rejectedPendingCells());
+    return;
+  }
   syncInProgress = true;
   let transientFailure = false;
   let blockedByServer = false;
@@ -251,7 +288,7 @@ async function syncPendingCells() {
   try {
     for (const [key, item] of [...pendingCells.entries()]) {
       const current = pendingCells.get(key);
-      if (!current || current.revision !== item.revision) continue;
+      if (!current || current.revision !== item.revision || current.rejected) continue;
       try {
         await api("/api/cell", {
           date: item.date,
@@ -270,8 +307,14 @@ async function syncPendingCells() {
           setStatus("Sync failed — your edits remain saved here; retrying…", "err");
           scheduleRetry();
         } else {
-          blockedByServer = true;
-          setStatus(`Server rejected an edit (${error.message}); the draft is still saved here.`, "err");
+          const latest = pendingCells.get(key);
+          if (latest && latest.revision === item.revision) {
+            latest.rejected = error.message || `HTTP ${error.status}`;
+            pendingCells.set(key, latest);
+            persistPendingCells();
+          }
+          // A rejected cell is kept for review, but must not block other edits.
+          continue;
         }
         return;
       }
@@ -293,8 +336,12 @@ async function syncPendingCells() {
       persistLocalState();
       setStatus("Saved ✓", "ok");
     } else if (!transientFailure && !blockedByServer && navigator.onLine) {
-      // A newer edit may have arrived while an older value was in flight.
-      scheduleRetry();
+      if (hasSyncablePendingCells()) {
+        // A newer edit may have arrived while an older value was in flight.
+        scheduleRetry();
+      } else {
+        showRejectedStatus(rejectedPendingCells());
+      }
     }
   }
 }
@@ -308,6 +355,34 @@ function removePendingCellsForDate(dateKey) {
     if (item.date === dateKey) pendingCells.delete(key);
   }
   persistPendingCells();
+}
+
+async function discardRejectedEdits() {
+  const rejected = rejectedPendingCells();
+  if (!rejected.length) return;
+  const noun = rejected.length === 1 ? "draft" : "drafts";
+  if (!confirm(`Discard ${rejected.length} rejected ${noun}? This removes the unsynced changes from this device.`)) {
+    return;
+  }
+
+  for (const [key, item] of rejected) {
+    const current = pendingCells.get(key);
+    if (!current || current.revision !== item.revision || !current.rejected) continue;
+    pendingCells.delete(key);
+    if (entries[item.date]) {
+      delete entries[item.date][item.column];
+      if (!Object.keys(entries[item.date]).length) delete entries[item.date];
+    }
+  }
+  persistPendingCells();
+  persistLocalState();
+  render();
+
+  if (navigator.onLine) {
+    await fetchState();
+  } else {
+    setStatus("Rejected drafts discarded from this device.", "ok");
+  }
 }
 
 window.addEventListener("online", () => {
@@ -339,20 +414,27 @@ function updateProgress() {
   const dates = weekDates();
   const todayKey = iso(new Date());
   let weekDone = 0;
-  const weekTotal = 7 * columns.length;
+  const firstFutureDay = dates.findIndex(day => iso(day) > todayKey);
+  const elapsedDays = todayKey < iso(dates[0])
+    ? 0
+    : firstFutureDay === -1 ? dates.length : firstFutureDay;
+  const weekTotal = elapsedDays * columns.length;
 
   dates.forEach((day, index) => {
     const key = iso(day);
     const dayData = entries[key] || {};
     const done = columns.filter(col => dayData[col] && dayData[col].done).length;
-    weekDone += done;
+    if (index < elapsedDays) weekDone += done;
     document.getElementById("dayprog-" + index).textContent =
       columns.length ? `(${done}/${columns.length} done)` : "(–)";
   });
 
   const pct = weekTotal ? Math.round(weekDone * 100 / weekTotal) : 0;
+  const progressLabel = weekTotal
+    ? `[${weekDone}/${weekTotal} done (${pct}%)]`
+    : "[No days elapsed]";
   document.getElementById("weekLabel").textContent =
-    `Week of ${fmtLong(dates[0])} — ${fmtLong(dates[6])}   [${weekDone}/${weekTotal} done (${pct}%)]`;
+    `Week of ${fmtLong(dates[0])} — ${fmtLong(dates[6])}   ${progressLabel}`;
 
   columns.forEach((col, index) => {
     const streak = computeStreak(col);
@@ -362,10 +444,58 @@ function updateProgress() {
 }
 
 /* ---------------- grid rendering ---------------- */
+function captureGridFocus(grid, dates) {
+  const active = document.activeElement;
+  if (!grid.contains(active)) return null;
+  const element = active.tagName === "TEXTAREA"
+    ? "textarea"
+    : active.type === "checkbox" ? 'input[type="checkbox"]' : null;
+  const dayIndex = Number(active.dataset.day);
+  const colIndex = Number(active.dataset.col);
+  if (!element || !Number.isInteger(dayIndex) || !Number.isInteger(colIndex)) return null;
+  return {
+    element,
+    dayIndex,
+    colIndex,
+    date: iso(dates[dayIndex]),
+    column: columns[colIndex],
+    selectionStart: element === "textarea" ? active.selectionStart : null,
+    selectionEnd: element === "textarea" ? active.selectionEnd : null,
+    selectionDirection: element === "textarea" ? active.selectionDirection : null,
+  };
+}
+
+function restoreGridFocus(grid, focusedCell) {
+  if (!focusedCell
+      || iso(weekDates()[focusedCell.dayIndex]) !== focusedCell.date
+      || columns[focusedCell.colIndex] !== focusedCell.column) return;
+  const replacement = grid.querySelector(
+    `${focusedCell.element}[data-day="${focusedCell.dayIndex}"][data-col="${focusedCell.colIndex}"]`
+  );
+  if (!replacement) return;
+  try {
+    replacement.focus({ preventScroll: true });
+  } catch (error) {
+    replacement.focus();
+  }
+  if (focusedCell.element === "textarea") {
+    try {
+      replacement.setSelectionRange(
+        focusedCell.selectionStart,
+        focusedCell.selectionEnd,
+        focusedCell.selectionDirection
+      );
+    } catch (error) {
+      // Selection restoration is best-effort on browsers without textarea support.
+    }
+  }
+}
+
 function render() {
   const grid = document.getElementById("grid");
   if (!grid) return;
   const dates = weekDates();
+  const focusedCell = captureGridFocus(grid, dates);
   const todayKey = iso(new Date());
   grid.style.gridTemplateColumns = `170px repeat(${columns.length}, minmax(190px, 1fr))`;
 
@@ -422,6 +552,8 @@ function render() {
     });
   });
 
+  restoreGridFocus(grid, focusedCell);
+
   grid.querySelectorAll("[data-clear]").forEach(button => {
     button.addEventListener("click", async () => {
       const dayIndex = +button.dataset.clear;
@@ -431,7 +563,13 @@ function render() {
       try {
         await syncPendingCells();
         if (hasPendingCellsForDate(key)) {
-          setStatus("Sync this day's pending edits before clearing it.", "err");
+          const rejectedForDay = rejectedPendingCells().some(([, item]) => item.date === key);
+          setStatus(
+            rejectedForDay
+              ? "Discard or edit this day's rejected draft before clearing it."
+              : "Sync this day's pending edits before clearing it.",
+            "err"
+          );
           return;
         }
         await api("/api/clear-day", { date: key });
@@ -483,7 +621,7 @@ document.getElementById("statsBtn").onclick = async () => {
   const body = document.getElementById("statsBody");
   body.textContent = "Loading…";
   try {
-    const stats = await requestJson("/api/stats");
+    const stats = await requestJson(`/api/stats?today=${encodeURIComponent(iso(new Date()))}`);
     body.innerHTML =
       `Days tracked: <b>${stats.days_tracked}</b><br>` +
       `Tasks done: <b>${stats.tasks_done}</b> (${stats.pct}%)<br>` +
@@ -535,7 +673,13 @@ async function loadBackupHistory() {
       restoreButton.textContent = "Restore";
       restoreButton.addEventListener("click", async () => {
         if (pendingCells.size) {
-          setStatus("Sync or resolve pending edits before restoring a backup.", "err");
+          const rejectedCount = rejectedPendingCells().length;
+          setStatus(
+            rejectedCount
+              ? "Discard or edit rejected drafts before restoring a backup."
+              : "Wait for pending edits to sync before restoring a backup.",
+            "err"
+          );
           return;
         }
         if (!confirm(`Restore the planner from ${timestamp.textContent}? The current version will be backed up first.`)) return;
@@ -665,6 +809,7 @@ document.getElementById("retryBtn").onclick = () => {
   retryDelayMs = 1000;
   syncPendingCells();
 };
+document.getElementById("discardRejectedBtn").onclick = discardRejectedEdits;
 
 /* ---------------- init & offline app shell ---------------- */
 restoreLocalState();

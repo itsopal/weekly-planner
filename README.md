@@ -14,7 +14,7 @@ A small, self-hosted weekly planner built with Flask and plain HTML, CSS, and Ja
 - Switch between light and dark themes.
 - Optional single-password login for a private, single-user deployment.
 - Offline cell edits are kept in this browser and retried automatically with backoff when connectivity returns.
-- Rotating history of the latest 10 data snapshots, with restore controls in the app.
+- Rotating history of up to 10 compressed daily data snapshots (automatic snapshots are limited to one per 24 hours), with restore controls in the app.
 
 ## UI preview
 
@@ -63,7 +63,7 @@ See [DEPLOY.md](DEPLOY.md) for production and PythonAnywhere guidance, including
 
 ## Your data
 
-Planner entries are stored in `planner_data.json` under `DATA_DIR` (defaults to `web_planner/`). The app keeps a legacy `.bak` file and up to 10 timestamped snapshots in `planner_backups/`; use **Backup History** in the app to restore a snapshot. Set `DATA_DIR` to a writable, persistent directory on hosts with ephemeral application storage, and back it up regularly.
+Planner entries are stored in `planner_data.json` under `DATA_DIR` (defaults to `web_planner/`). The app keeps a legacy `.bak` file and up to 10 compressed timestamped snapshots in `planner_backups/`, creating automatic snapshots at most once every 24 hours rather than on each save; restoring always snapshots the current state first. Existing uncompressed snapshots remain readable. Use **Backup History** in the app to restore a snapshot. Set `DATA_DIR` to a writable, persistent directory on hosts with ephemeral application storage, and back it up regularly.
 
 For offline use, the app caches its shell and last loaded planner in this browser and persists unsynced cell edits in local storage. This requires an initial visit while online and a secure origin (HTTPS or localhost). Local browser storage is not encrypted; clear the site's browser data to remove the cached planner from that device. The JSON backend serializes threaded requests within one process; use a single WSGI worker process. Multiple worker processes need a shared database instead.
 
