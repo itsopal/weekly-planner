@@ -22,6 +22,7 @@ the desktop version, so you can copy that file here to migrate).
 
 import copy
 import csv
+import gzip
 import io
 import json
 import os
@@ -29,6 +30,7 @@ import re
 import shutil
 import tempfile
 import threading
+import time
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 
@@ -54,13 +56,18 @@ BACKUP_FILE = DATA_FILE + ".bak"
 TEMP_FILE = DATA_FILE + ".tmp"
 BACKUP_DIR = os.path.join(DATA_DIR, "planner_backups")
 MAX_BACKUPS = 10
+BACKUP_INTERVAL = timedelta(days=1)
 LEGACY_BACKUP_ID = "legacy-bak"
 BACKUP_FILENAME_RE = re.compile(
-    r"^planner_data-(?P<timestamp>\d{8}T\d{6}\.\d{6}Z)\.json$"
+    r"^planner_data-(?P<timestamp>\d{8}T\d{6}\.\d{6}Z)\.json(?:\.gz)?$"
 )
 
 DEFAULT_COLUMNS = ["Work", "Study", "Health", "Personal"]
 MAX_NOTE_LENGTH = 2000
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_RATE_WINDOW_SECONDS = 15 * 60
+_LOGIN_ATTEMPTS = {}
+_LOGIN_ATTEMPTS_LOCK = threading.Lock()
 
 # All access to the process-wide planner state and its backing file is serialized.
 # The re-entrant lock allows state_transaction() to call save_data() safely.
@@ -68,19 +75,66 @@ STATE_LOCK = threading.RLock()
 
 app = Flask(__name__)
 
+DEVELOPMENT_SECRET_KEY = "dev-only-insecure-key"
+
+
+def _resolve_secret_key(secret_key, password_configured):
+    """Require a private session-signing key whenever password auth is enabled."""
+    if secret_key:
+        if password_configured and secret_key == DEVELOPMENT_SECRET_KEY:
+            raise RuntimeError(
+                "SECRET_KEY must be a unique random value when PLANNER_PASSWORD is set."
+            )
+        return secret_key
+    if password_configured:
+        raise RuntimeError(
+            "SECRET_KEY must be set when PLANNER_PASSWORD is set; refusing to start "
+            "with the insecure development key."
+        )
+    print(
+        "⚠️  WARNING: SECRET_KEY is not set — using the insecure development key. "
+        "Set SECRET_KEY before enabling password protection."
+    )
+    return DEVELOPMENT_SECRET_KEY
+
+
 # ------------------------------------------------------------------ #
 # Simple password protection (single user, session cookie)
 # ------------------------------------------------------------------ #
-app.secret_key = os.environ.get("SECRET_KEY", "dev-only-insecure-key")
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
-
 _raw_password = os.environ.get("PLANNER_PASSWORD", "")
+app.secret_key = _resolve_secret_key(
+    os.environ.get("SECRET_KEY"), password_configured=bool(_raw_password)
+)
+app.config.update(
+    PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_HTTPONLY=True,
+)
+
 PASSWORD_HASH = generate_password_hash(_raw_password) if _raw_password else None
 del _raw_password  # don't keep the plain password in memory
 if PASSWORD_HASH is None:
     print("⚠️  WARNING: PLANNER_PASSWORD is not set — login is DISABLED (open site).")
 
 AUTH_ENABLED = PASSWORD_HASH is not None
+
+
+def _begin_login_attempt(remote_addr):
+    """Reserve one login attempt; return retry seconds when the IP is limited."""
+    now = time.monotonic()
+    with _LOGIN_ATTEMPTS_LOCK:
+        attempts = _LOGIN_ATTEMPTS.setdefault(remote_addr, [])
+        cutoff = now - LOGIN_RATE_WINDOW_SECONDS
+        attempts[:] = [attempt for attempt in attempts if attempt > cutoff]
+        if len(attempts) >= LOGIN_MAX_ATTEMPTS:
+            return max(1, int(LOGIN_RATE_WINDOW_SECONDS - (now - attempts[0])) + 1)
+        attempts.append(now)
+        return 0
+
+
+def _clear_login_attempts(remote_addr):
+    with _LOGIN_ATTEMPTS_LOCK:
+        _LOGIN_ATTEMPTS.pop(remote_addr, None)
 
 
 def safe_next(default="/"):
@@ -107,6 +161,32 @@ def require_login():
     return None
 
 
+@app.before_request
+def require_json_for_api_mutations():
+    """Reject simple cross-site form/text requests to state-changing API routes."""
+    if (
+        request.path.startswith("/api/")
+        and request.method in {"POST", "PUT", "PATCH", "DELETE"}
+        and not request.is_json
+    ):
+        return (
+            jsonify({"ok": False, "error": "Content-Type must be application/json"}),
+            415,
+        )
+    return None
+
+
+@app.after_request
+def add_security_and_cache_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if not request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 # In-memory state, loaded once at startup, saved on every change.
 columns: list = []
 entries: dict = {}
@@ -116,7 +196,8 @@ entries: dict = {}
 # Data persistence and in-process concurrency
 # ------------------------------------------------------------------ #
 def _read_data_file(path):
-    with open(path, "r", encoding="utf-8") as data_file:
+    opener = gzip.open if os.fspath(path).endswith(".gz") else open
+    with opener(path, "rt", encoding="utf-8") as data_file:
         raw = json.load(data_file)
     if not isinstance(raw, dict):
         raise ValueError("Planner data must be a JSON object")
@@ -129,6 +210,16 @@ def _read_data_file(path):
         raise ValueError("Planner columns are invalid")
     if not isinstance(loaded_entries, dict):
         raise ValueError("Planner entries are invalid")
+    for date_key, day_data in loaded_entries.items():
+        if not isinstance(date_key, str) or not isinstance(day_data, dict):
+            raise ValueError("Planner day entries are invalid")
+        for column_name, cell in day_data.items():
+            if not isinstance(column_name, str) or not isinstance(cell, dict):
+                raise ValueError("Planner cell entries are invalid")
+            if "done" in cell and not isinstance(cell["done"], bool):
+                raise ValueError("Planner cell completion value is invalid")
+            if "note" in cell and not isinstance(cell["note"], str):
+                raise ValueError("Planner cell note is invalid")
     return loaded_columns or list(DEFAULT_COLUMNS), loaded_entries
 
 
@@ -153,38 +244,78 @@ def load_data():
     global columns, entries
     with STATE_LOCK:
         candidates = [DATA_FILE, *_backup_paths(), BACKUP_FILE]
+        invalid_candidates = []
         for path in candidates:
             if not os.path.exists(path):
                 continue
             try:
                 loaded_columns, loaded_entries = _read_data_file(path)
-            except (json.JSONDecodeError, OSError, TypeError, ValueError):
+            except (json.JSONDecodeError, OSError, TypeError, ValueError) as error:
+                invalid_candidates.append(path)
+                app.logger.warning(
+                    "Planner data file %s is invalid or unreadable; trying the next backup: %s",
+                    path,
+                    error,
+                )
                 continue
             columns = loaded_columns
             entries = loaded_entries
+            if path != DATA_FILE:
+                app.logger.warning(
+                    "Recovered planner data from fallback file %s.", path
+                )
             return path
 
         columns = list(DEFAULT_COLUMNS)
         entries = {}
+        if invalid_candidates:
+            app.logger.error(
+                "No valid planner data or backup was found; starting with an empty planner."
+            )
         return None
 
 
-def _create_backup_snapshot():
-    """Snapshot the current primary file before it is replaced."""
+def _create_backup_snapshot(force=False):
+    """Snapshot the current file at most daily, unless explicitly forced."""
     if not os.path.isfile(DATA_FILE):
         return
 
-    os.makedirs(BACKUP_DIR, exist_ok=True)
     snapshot_time = datetime.now(timezone.utc)
+    previous_snapshots = _backup_paths()
+    latest_snapshot_time = None
+    for path in previous_snapshots:
+        match = BACKUP_FILENAME_RE.fullmatch(os.path.basename(path))
+        try:
+            latest_snapshot_time = datetime.strptime(
+                match.group("timestamp"), "%Y%m%dT%H%M%S.%fZ"
+            ).replace(tzinfo=timezone.utc)
+        except (AttributeError, ValueError):
+            continue
+        break
+
+    snapshot_due = (
+        force
+        or latest_snapshot_time is None
+        or snapshot_time - latest_snapshot_time >= BACKUP_INTERVAL
+    )
+    if not snapshot_due:
+        return
+
+    os.makedirs(BACKUP_DIR, exist_ok=True)
     while True:
         timestamp = snapshot_time.strftime("%Y%m%dT%H%M%S.%fZ")
-        backup_path = os.path.join(BACKUP_DIR, f"planner_data-{timestamp}.json")
+        backup_path = os.path.join(BACKUP_DIR, f"planner_data-{timestamp}.json.gz")
         if not os.path.exists(backup_path):
             break
         snapshot_time += timedelta(microseconds=1)
-    shutil.copy2(DATA_FILE, backup_path)
+    with open(DATA_FILE, "rb") as source, open(backup_path, "wb") as raw_backup:
+        with gzip.GzipFile(
+            filename="", mode="wb", fileobj=raw_backup, compresslevel=6, mtime=0
+        ) as compressed_backup:
+            shutil.copyfileobj(source, compressed_backup)
 
-    # Keep the legacy .bak file current for compatibility with earlier releases.
+    # Keep the legacy .bak file current when a snapshot is made, without copying
+    # the entire planner file on every cell save.
     fd, legacy_temp = tempfile.mkstemp(
         prefix=os.path.basename(BACKUP_FILE) + ".",
         suffix=".tmp",
@@ -275,9 +406,9 @@ def valid_date_key(value: str) -> bool:
         return False
 
 
-def compute_streak(col_name: str) -> int:
+def compute_streak(col_name: str, today=None) -> int:
     with STATE_LOCK:
-        current_day = date.today()
+        current_day = today or date.today()
         streak = 0
         while True:
             cell = entries.get(current_day.isoformat(), {}).get(col_name)
@@ -345,7 +476,19 @@ def login():
         return redirect(safe_next())
     error = None
     if request.method == "POST":
+        remote_addr = request.remote_addr or "unknown"
+        retry_after = _begin_login_attempt(remote_addr)
+        if retry_after:
+            return (
+                render_template(
+                    "login.html",
+                    error="Too many login attempts. Please wait and try again.",
+                ),
+                429,
+                {"Retry-After": str(retry_after)},
+            )
         if check_password_hash(PASSWORD_HASH, request.form.get("password", "")):
+            _clear_login_attempts(remote_addr)
             session["logged_in"] = True
             session.permanent = True
             return redirect(safe_next())
@@ -389,7 +532,7 @@ def api_state():
 @app.route("/api/cell", methods=["POST"])
 def api_cell():
     """Save one cell: {date, column, done, note}."""
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(silent=True) or {}
     date_key = data.get("date", "")
     col = data.get("column", "")
     if not valid_date_key(date_key):
@@ -413,7 +556,7 @@ def api_cell():
 
 @app.route("/api/clear-day", methods=["POST"])
 def api_clear_day():
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(silent=True) or {}
     date_key = data.get("date", "")
     if not valid_date_key(date_key):
         return jsonify({"ok": False, "error": "Bad date"}), 400
@@ -428,7 +571,7 @@ def api_clear_day():
 
 @app.route("/api/columns/add", methods=["POST"])
 def api_add_column():
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(silent=True) or {}
     name = str(data.get("name", "")).strip()
     if not name:
         return jsonify({"ok": False, "error": "Empty name"}), 400
@@ -446,7 +589,7 @@ def api_add_column():
 
 @app.route("/api/columns/rename", methods=["POST"])
 def api_rename_column():
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(silent=True) or {}
     old = str(data.get("old", ""))
     new = str(data.get("new", "")).strip()
 
@@ -468,7 +611,7 @@ def api_rename_column():
 
 @app.route("/api/columns/delete", methods=["POST"])
 def api_delete_column():
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(silent=True) or {}
     name = str(data.get("name", ""))
 
     with STATE_LOCK:
@@ -490,7 +633,7 @@ def api_delete_column():
 @app.route("/api/copy-prev-week", methods=["POST"])
 def api_copy_prev_week():
     """Copy last week's notes into the given week (unchecked)."""
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(silent=True) or {}
     week_start = data.get("week_start", "")
     if not valid_date_key(week_start):
         return jsonify({"ok": False, "error": "Bad week_start"}), 400
@@ -525,6 +668,10 @@ def api_copy_prev_week():
 
 @app.route("/api/stats")
 def api_stats():
+    today_key = request.args.get("today")
+    if today_key is not None and not valid_date_key(today_key):
+        return jsonify({"ok": False, "error": "Bad today date"}), 400
+    local_today = date.fromisoformat(today_key) if today_key else date.today()
     with STATE_LOCK:
         total_done = 0
         total_cells = 0
@@ -537,7 +684,7 @@ def api_stats():
                 best_count, best_day = day_done, date_key
         best_col, best_streak = None, 0
         for col in columns:
-            streak = compute_streak(col)
+            streak = compute_streak(col, local_today)
             if streak > best_streak:
                 best_streak, best_col = streak, col
         pct = (total_done * 100 // total_cells) if total_cells else 0
@@ -554,6 +701,14 @@ def api_stats():
         )
 
 
+def csv_safe_value(value):
+    """Prefix spreadsheet formula-like text so CSV imports treat it as data."""
+    text = str(value)
+    if text.lstrip().startswith(("=", "+", "-", "@")):
+        return "'" + text
+    return text
+
+
 @app.route("/api/export")
 def api_export():
     with STATE_LOCK:
@@ -562,14 +717,14 @@ def api_export():
         header = ["Date"]
         for col in columns:
             header.extend((f"{col} Done", f"{col} Note"))
-        writer.writerow(header)
+        writer.writerow([csv_safe_value(value) for value in header])
         for date_key in sorted(entries):
             day_data = entries[date_key]
             row = [date_key]
             for col in columns:
                 cell = day_data.get(col, {})
                 row.extend(("Yes" if cell.get("done") else "No", cell.get("note", "")))
-            writer.writerow(row)
+            writer.writerow([csv_safe_value(value) for value in row])
         return Response(
             "\ufeff" + buffer.getvalue(),
             mimetype="text/csv",
@@ -587,7 +742,7 @@ def api_backups():
 
 @app.route("/api/backups/restore", methods=["POST"])
 def api_restore_backup():
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(silent=True) or {}
     backup_id = data.get("backup_id")
     if not isinstance(backup_id, str) or (
         backup_id != LEGACY_BACKUP_ID and not BACKUP_FILENAME_RE.fullmatch(backup_id)
@@ -609,6 +764,9 @@ def api_restore_backup():
                 {"ok": False, "error": "Backup is invalid or unreadable"}
             ), 400
         try:
+            # Restoring is destructive, so always preserve the current state even
+            # when an automatic daily snapshot was just taken.
+            _create_backup_snapshot(force=True)
             with state_transaction():
                 columns[:] = backup_columns
                 entries.clear()
